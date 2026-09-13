@@ -1,0 +1,39 @@
+services:
+  router:
+    build: ./frr
+    container_name: frr-router
+    privileged: true
+    restart: always
+    volumes:
+      - ./frr/daemons:/etc/frr/daemons
+      - ./frr/vtysh.conf:/etc/frr/vtysh.conf
+    ports:
+      - "2022:22"
+    networks:
+      - router-network
+
+  backend:
+    build: ./backend
+    container_name: router-backend
+    restart: always
+    ports:
+      - "5000:5000"
+    networks:
+      - router-network
+
+  frontend:
+    image: nginx:alpine
+    container_name: router-frontend
+    restart: always
+    volumes:
+      - ./frontend:/usr/share/nginx/html:ro
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    networks:
+      - router-network
+
+networks:
+  router-network:
+    driver: bridge

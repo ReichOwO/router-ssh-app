@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Router Command Executor</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f4f4f4;
+            display: flex;
+            justify-content: center;
+            padding-top: 60px;
+        }
+        .card {
+            width: 600px;
+            background: white;
+            padding: 24px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,.12);
+        }
+        input {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 12px;
+            font-size: 16px;
+            box-sizing: border-box;
+            font-family: monospace;
+        }
+        button {
+            padding: 10px 18px;
+            cursor: pointer;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        #status {
+            min-height: 24px;
+            margin-top: 10px;
+            font-weight: bold;
+        }
+        #output {
+            background: #1e1e1e;
+            color: #00ff00;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>Router Command Executor</h1>
+        <p>Enter router IP and command to execute via SSH.</p>
+
+        <label>Router IP Address:</label>
+        <input id="routerIp" type="text" placeholder="e.g., 192.168.138.10" value="192.168.138.10" />
+
+        <label>Command:</label>
+        <input id="command" type="text" placeholder="e.g., show ip int br" value="show ip int br" />
+
+        <button onclick="executeCommand()">Execute</button>
+
+        <p id="status"></p>
+
+        <h2>Output:</h2>
+        <div id="output">Waiting for command...</div>
+    </div>
+
+    <script>
+        const API_URL = 'http://192.168.227.129:5000/api/execute';
+
+        async function executeCommand() {
+            const routerIp = document.getElementById('routerIp').value.trim();
+            const command = document.getElementById('command').value.trim();
+            const status = document.getElementById('status');
+            const output = document.getElementById('output');
+
+            if (!routerIp || !command) {
+                status.innerText = 'Please enter both IP and command!';
+                return;
+            }
+
+            status.innerText = 'Executing...';
+            output.innerText = 'Connecting to router...';
+
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        router_ip: routerIp, 
+                        command: command 
+                    })
+                });
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    status.innerText = 'Command executed successfully!';
+                    output.innerText = result.output;
+                } else {
+                    status.innerText = 'Error: ' + (result.error || 'Unknown error');
+                    output.innerText = result.error || 'Failed to execute command';
+                }
+            } catch (error) {
+                status.innerText = 'Error: ' + error.message;
+                output.innerText = 'Connection error: ' + error.message;
+            }
+        }
+    </script>
+</body>
+</html>
