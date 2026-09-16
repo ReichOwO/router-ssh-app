@@ -2,25 +2,89 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import paramiko
 import time
+import re
 
 app = Flask(__name__)
 CORS(app)
 
 ROUTER_USERNAME = "admin"
 ROUTER_PASSWORD = "cisco"
+ROUTER_PORT = 22
+
+def translate_cisco_command(cmd):
+    """Translate Cisco IOS commands to Linux equivalents for FRR"""
+    cmd_lower = cmd.strip().lower()
+    mapping = {
+        'show ip interface brief': 'ip -br addr show',
+        'show ip int br': 'ip -br addr show',
+        'show ip interface': 'ip addr show',
+        'show ip int': 'ip addr show',
+        'show interfaces': 'ip addr show',
+        'show ip route': 'ip route show',
+        'show version': 'cat /etc/os-release',
+        'show running-config': 'vtysh -c "show running-config"',
+        'show hostname': 'hostname',
+    }
+    return mapping.get(cmd_lower, cmd)
+
+def format_cisco_output(command, raw_output):
+    """Format Linux output as Cisco IOS style"""
+    cmd_lower = command.strip().lower()
+
+    if cmd_lower in ['show ip interface brief', 'show ip int br']:
+        result = f"{command}\n"
+        result += f"{'Interface':<16}{'IP-Address':<18}{'OK?':<6}{'Method':<8}{'Status':<8}{'Protocol':<8}\n"
+        
+        for line in raw_output.split('\n'):
+            line = line.strip()
+            if not line or 'lo' not in line and 'eth' not in line:
+                continue
+            
+            parts = line.split()
+            if len(parts) < 3:
+                continue
+                
+            iface_raw = parts[0].split('@')[0]
+            if iface_raw == 'lo':
+                iface = 'Loopback0'
+            elif iface_raw.startswith('eth'):
+                iface = 'FastEthernet0/0'
+            else:
+                iface = iface_raw
+            
+            ip = parts[2].split('/')[0] if len(parts) > 2 else 'unassigned'
+            status = 'up' if 'UP' in line.upper() else 'down'
+            
+            result += f"{iface:<16}{ip:<18}{'YES':<6}{'manual':<8}{status:<8}{status:<8}\n"
+        
+        result += f"\nR1#"
+        return result
+    
+    if cmd_lower in ['show ip route']:
+        result = f"{command}\n"
+        result += "Codes: C - connected, S - static\n\n"
+        result += raw_output + "\nR1#"
+        return result
+    
+    return f"{command}\n{raw_output}\nR1#"
 
 def ssh_to_router(router_ip, command):
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     
     try:
-        port = 22
+        host = router_ip
+        port = ROUTER_PORT
         if ':' in router_ip:
-            router_ip, port = router_ip.split(':')
-            port = int(port)
+            host, port_str = router_ip.split(':')
+            port = int(port_str)
+        
+        if host in ('localhost', '127.0.0.1'):
+            host = 'router'
+            port = 22
         
         client.connect(
-            hostname=router_ip,
+            hostname=host,
             port=port,
             username=ROUTER_USERNAME,
             password=ROUTER_PASSWORD,
@@ -35,7 +99,9 @@ def ssh_to_router(router_ip, command):
         if shell.recv_ready():
             shell.recv(65535)
         
-        shell.send(command + "\n")
+        # Translate Cisco command to Linux
+        actual_cmd = translate_cisco_command(command)
+        shell.send(actual_cmd + "\n")
         time.sleep(2)
         
         output = ""
@@ -44,7 +110,10 @@ def ssh_to_router(router_ip, command):
             time.sleep(0.5)
         
         client.close()
-        return output
+        
+        # Format output as Cisco-style
+        formatted = format_cisco_output(command, output)
+        return formatted
         
     except Exception as e:
         client.close()

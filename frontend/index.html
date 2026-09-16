@@ -3,76 +3,146 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Router Command Executor</title>
+    <title>Cisco Router SSH</title>
     <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: Arial, sans-serif;
-            background: #f4f4f4;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+            background: #0a1628;
+            color: #ffffff;
+            min-height: 100vh;
             display: flex;
             justify-content: center;
-            padding-top: 60px;
+            padding: 40px 20px;
         }
-        .card {
-            width: 600px;
-            background: white;
-            padding: 24px;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,.12);
+        .container {
+            width: 100%;
+            max-width: 820px;
+            background: #0f2342;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+            border: 1px solid #1e3a5f;
+        }
+        .header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+        .header-icon {
+            font-size: 32px;
+        }
+        h1 {
+            font-size: 26px;
+            font-weight: 600;
+            color: #4a9eff;
+            letter-spacing: 0.3px;
+        }
+        .subtitle {
+            color: #8ba3c7;
+            font-size: 14px;
+            margin-bottom: 32px;
+        }
+        label {
+            display: block;
+            font-size: 14px;
+            font-weight: 600;
+            color: #c5d5ea;
+            margin-bottom: 8px;
         }
         input {
             width: 100%;
-            padding: 12px;
-            margin-bottom: 12px;
-            font-size: 16px;
+            padding: 14px 16px;
+            margin-bottom: 20px;
+            font-size: 15px;
             box-sizing: border-box;
-            font-family: monospace;
+            background: #0a1628;
+            border: 1px solid #2a4d73;
+            border-radius: 8px;
+            color: #ffffff;
+            font-family: 'Consolas', 'Monaco', monospace;
+            transition: border 0.2s;
+        }
+        input::placeholder {
+            color: #4a6b8a;
+        }
+        input:focus {
+            outline: none;
+            border-color: #4a9eff;
+            box-shadow: 0 0 0 3px rgba(74, 158, 255, 0.15);
         }
         button {
-            padding: 10px 18px;
+            width: 100%;
+            padding: 14px;
             cursor: pointer;
-            background: #007bff;
+            background: #1e88e5;
             color: white;
             border: none;
-            border-radius: 4px;
+            border-radius: 8px;
             font-size: 16px;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+            transition: background 0.2s;
         }
         button:hover {
-            background: #0056b3;
+            background: #1565c0;
+        }
+        button:disabled {
+            background: #37474f;
+            cursor: not-allowed;
         }
         #status {
             min-height: 24px;
-            margin-top: 10px;
-            font-weight: bold;
+            margin-top: 16px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .status-success { color: #4caf50; }
+        .status-error { color: #f44336; }
+        .status-info { color: #8ba3c7; }
+        .output-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #c5d5ea;
+            margin-top: 28px;
+            margin-bottom: 12px;
         }
         #output {
-            background: #1e1e1e;
-            color: #00ff00;
-            padding: 15px;
-            border-radius: 4px;
-            font-family: monospace;
+            background: #000000;
+            color: #00ff41;
+            padding: 20px;
+            border-radius: 8px;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 13.5px;
+            line-height: 1.6;
             white-space: pre-wrap;
-            max-height: 400px;
+            max-height: 420px;
             overflow-y: auto;
-            margin-top: 10px;
+            border: 1px solid #1e3a5f;
+            min-height: 80px;
         }
     </style>
 </head>
 <body>
-    <div class="card">
-        <h1>Router Command Executor</h1>
-        <p>Enter router IP and command to execute via SSH.</p>
+    <div class="container">
+        <div class="header">
+            <span class="header-icon">🌐</span>
+            <h1>Cisco Router SSH</h1>
+        </div>
+        <p class="subtitle">Connect to a Cisco router and execute an IOS command.</p>
 
-        <label>Router IP Address:</label>
-        <input id="routerIp" type="text" placeholder="e.g., 192.168.138.10" value="192.168.138.10" />
+        <label>Router IP Address</label>
+        <input id="routerIp" type="text" placeholder="Enter your IP address" />
 
-        <label>Command:</label>
-        <input id="command" type="text" placeholder="e.g., show ip int br" value="show ip int br" />
+        <label>Router Command</label>
+        <input id="command" type="text" placeholder="Enter your command" />
 
-        <button onclick="executeCommand()">Execute</button>
+        <button id="executeBtn" onclick="executeCommand()">Execute Command</button>
 
         <p id="status"></p>
 
-        <h2>Output:</h2>
+        <h2 class="output-title">Router Output</h2>
         <div id="output">Waiting for command...</div>
     </div>
 
@@ -84,14 +154,18 @@
             const command = document.getElementById('command').value.trim();
             const status = document.getElementById('status');
             const output = document.getElementById('output');
+            const btn = document.getElementById('executeBtn');
 
             if (!routerIp || !command) {
+                status.className = 'status-error';
                 status.innerText = 'Please enter both IP and command!';
                 return;
             }
 
+            status.className = 'status-info';
             status.innerText = 'Executing...';
             output.innerText = 'Connecting to router...';
+            btn.disabled = true;
 
             try {
                 const response = await fetch(API_URL, {
@@ -105,15 +179,20 @@
                 const result = await response.json();
                 
                 if (result.status === 'success') {
-                    status.innerText = 'Command executed successfully!';
+                    status.className = 'status-success';
+                    status.innerText = 'Command executed successfully.';
                     output.innerText = result.output;
                 } else {
+                    status.className = 'status-error';
                     status.innerText = 'Error: ' + (result.error || 'Unknown error');
                     output.innerText = result.error || 'Failed to execute command';
                 }
             } catch (error) {
+                status.className = 'status-error';
                 status.innerText = 'Error: ' + error.message;
                 output.innerText = 'Connection error: ' + error.message;
+            } finally {
+                btn.disabled = false;
             }
         }
     </script>
